@@ -1,11 +1,19 @@
 # PyMoDAQ Plugins
 
-PyMoDAQ, Modular Data Acquisition with Python, is a set of **python** modules used to perform automated measurements. 
+plugin to control Ocean insight spectrometers through the PyMoDAQ abstraction layer.
+Relies on the fantastic python-seabreeze library: https://python-seabreeze.readthedocs.io/
 
-This repository contains various hardware plugins compatible with PyMoDAQ
+In the current state, tested with a USB2000+ spectrometer.
+Expected to work with most spectrometers supported by the seabreeze library since it supports only basic functionalities
 
-For an exhaustive list of the available plugins, see https://github.com/CEMES-CNRS/pymodaq_plugin_manager/blob/main/pymodaq_plugin_manager/doc/PluginList.md
+Feel free to contact authors for advanced features integration or in the case of unsupported models.
 
-GitHub repo: https://github.com/CEMES-CNRS
+## Authors
 
-Documentation: http://pymodaq.cnrs.fr/
+Nicolas Tappy: nicolas.tappy@epfl.ch
+
+Links:
+python-seabreeze repo: https://github.com/ap--/python-seabreeze
+python-seabreeze Documentation: https://python-seabreeze.readthedocs.io/en/latest/
+PyMoDAQ GitHub repo: https://github.com/CEMES-CNRS
+PyMoDAQ Documentation: http://pymodaq.cnrs.fr/
