@@ -2,6 +2,7 @@ import numpy as np
 from easydict import EasyDict as edict
 from pymodaq.daq_utils.daq_utils import ThreadCommand, getLineInfo, DataFromPlugins, Axis
 from pymodaq.daq_viewer.utility_classes import DAQ_Viewer_base, comon_parameters, main
+from timeit import timeit
 
 # explicitly request cseabreeze
 import seabreeze
@@ -16,6 +17,9 @@ class DAQ_1DViewer_oceanoptics_seabreeze(DAQ_Viewer_base):
     # Upon initialisation
     devices = list_devices()
 
+    #Supports pseudo hardware-averaging
+    hardware_averaging = True
+
     params = comon_parameters + [
         {'title': 'Device:', 'name': 'device', 'type': 'list', 'limits': devices},
         {'title': 'Integration (ms):', 'name': 'integration', 'type': 'float', 'value': 1.0},
@@ -25,6 +29,7 @@ class DAQ_1DViewer_oceanoptics_seabreeze(DAQ_Viewer_base):
             {'title': 'Max Intensity', 'name': 'max_intensity', 'type': "float", 'value': 65535, 'readonly': True},
             {'title': 'Pixels:', 'name': 'pixels', 'type': 'int', 'value': 2048, 'readonly': True},
             {'title': 'Dark Channels:', 'name': 'dark_channels', 'type': 'int', 'value': 10, 'readonly': True},
+            {'title': 'Readout Time (ms)', 'name': 'readout_time', 'type': 'float', 'value': 666, 'readonly': True},
         ]}
     ]
 
@@ -77,7 +82,7 @@ class DAQ_1DViewer_oceanoptics_seabreeze(DAQ_Viewer_base):
             self.settings.child('advanced').child('dark_channels').setValue(c0)
             # get the x_axis
             data_x_axis = self.controller.wavelengths()  # Way to get the x axis
-            data_x_axis = data_x_axis[c0:] #Get rid of the dark pixels
+            data_x_axis = data_x_axis[c0:]  # Get rid of the dark pixels
             self.x_axis = Axis(data=data_x_axis, label='wavelength', units='nm')
             self.emit_x_axis()
 
@@ -87,7 +92,7 @@ class DAQ_1DViewer_oceanoptics_seabreeze(DAQ_Viewer_base):
             # initialize viewers pannel with the future type of data
             self.data_grabed_signal_temp.emit([
                 DataFromPlugins(name=specname,
-                                data=[self.controller.intensities()[c0:]],
+                                data=[np.zeros_like(data_x_axis)],
                                 dim='Data1D',
                                 labels=['Intensity'],
                                 x_axis=self.x_axis), ])
@@ -107,6 +112,13 @@ class DAQ_1DViewer_oceanoptics_seabreeze(DAQ_Viewer_base):
             else:
                 advanced_settings.child('correct_non_linearity').setValue(False)
                 advanced_settings.child('correct_non_linearity').setOpts(enabled=False)
+
+            # measure the readout time
+            Nperf = 200
+            self.settings.child('integration').setValue(tlimits[0])  # Update the parameter value to the lower limit
+            self.controller.integration_time_micros(tlimits[0]*1000)  # Set the readout time to lower limit
+            perf = timeit(lambda: self.controller.intensities(), number=Nperf)  # time the execution of code in [s]
+            self.settings.child('advanced').child('readout_time').setValue(1000*perf/Nperf)  # set the settings
 
             ##############################
 
@@ -128,7 +140,7 @@ class DAQ_1DViewer_oceanoptics_seabreeze(DAQ_Viewer_base):
         self.controller.close()
         ##
 
-    def grab_data(self, Naverage=1, **kwargs):
+    def grab_data(self, Naverage = 1, **kwargs):
         """
         Parameters
         ----------
@@ -137,10 +149,19 @@ class DAQ_1DViewer_oceanoptics_seabreeze(DAQ_Viewer_base):
         """
         nlc = self.settings.child('advanced').child('correct_non_linearity').value()
         c0 = self.settings.child('advanced').child('dark_channels').value()
-        ##synchrone version (blocking function)
-        data = self.controller.intensities(correct_nonlinearity=nlc)[c0:]
-        self.data_grabed_signal.emit([DataFromPlugins(name='oceanseabreeze', data=[data],
-                                                      dim='Data1D', labels=['spectrum'])])
+        # synchrone version (blocking function)
+        # Pseudo-hardware-averaging
+        if Naverage>1:
+            data = [self.controller.intensities(correct_nonlinearity=nlc)[c0:] for i in range(Naverage)]
+            data = np.array(data)
+            data = data.mean(0)
+        # Otherwise normal single-acquisition
+        else:
+            data = self.controller.intensities(correct_nonlinearity=nlc)[c0:]
+
+        data_emit = DataFromPlugins(name='oceanseabreeze', data=[data], dim='Data1D', labels=['spectrum'])
+
+        self.data_grabed_signal.emit([data_emit])
         #########################################################
 
     def callback(self):
@@ -151,13 +172,9 @@ class DAQ_1DViewer_oceanoptics_seabreeze(DAQ_Viewer_base):
         #                                           dim='Data1D', labels=['dat0', 'data1'])])
 
     def stop(self):
-
-        self.controller.close()
+        pass
         # self.emit_status(ThreadCommand('Update_Status', ['Some info you want to log']))
         ##############################
-
-        return ''
-
 
 if __name__ == '__main__':
     main(__file__)
